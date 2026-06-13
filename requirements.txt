@@ -1,0 +1,11 @@
+streamlit==1.32.0
+torch
+torchvision
+torchaudio
+lightgbm
+scikit-learn
+numpy
+scipy
+librosa
+matplotlib
+seaborn
