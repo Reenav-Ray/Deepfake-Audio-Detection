@@ -1,11 +1,10 @@
-streamlit==1.32.0
+--extra-index-url https://download.pytorch.org/whl/cpu
+streamlit
 torch
 torchvision
 torchaudio
 lightgbm
 scikit-learn
-numpy
-scipy
 librosa
-matplotlib
-seaborn
+numpy
+joblib
