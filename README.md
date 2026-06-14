@@ -48,12 +48,4 @@ The model was evaluated against strict verification criteria, successfully clear
 | **Genuine Class Accuracy** | 83.12% |
 | **Deepfake Class Accuracy** | 80.83% |
 
-*(Note: EER reached the practical hardware/architectural limit for this specific dataset size and lightweight model constraint).*
-
-## ⚙️ Pipeline & Installation
-
-### Local Setup
-1. Clone the repository:
-   ```bash
-   git clone [https://github.com/YOUR_USERNAME/deepfake-audio-detection.git](https://github.com/YOUR_USERNAME/deepfake-audio-detection.git)
-   cd deepfake-audio-detection
+*(Note: EER reached the practical hardware/architectural limit for this specific dataset size and lightweight model constraint).* 
