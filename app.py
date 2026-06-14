@@ -7,6 +7,43 @@ import joblib
 import librosa
 import numpy as np
 
+import os
+import gdown
+import streamlit as st
+
+# ==========================================
+# AUTOMATIC GOOGLE DRIVE FOLDER DOWNLOADER
+# ==========================================
+@st.cache_resource
+def download_models_from_drive_folder():
+    # Target path where models should live
+    target_dir = "models"
+    
+    # Define the expected paths for your 3 files
+    required_files = [
+        os.path.join(target_dir, "model_1_resnet18.pth"),
+        os.path.join(target_dir, "model_2_lightgbm.pkl"),
+        os.path.join(target_dir, "meta_learner.pkl")
+    ]
+    
+    # Check if any of the files are missing
+    missing = [f for f in required_files if not os.path.exists(f)]
+    
+    if missing:
+        with st.spinner("📥 Downloading models from Google Drive folder... (This takes 1-2 minutes on first boot)"):
+            folder_id = '1f-_kq2aHau52gtolJWLaScXhBNXcZZ5a'
+            
+            try:
+                # gdown will download the entire contents of the folder directly into the 'models' directory
+                gdown.download_folder(id=folder_id, output=target_dir, quiet=False, remaining_ok=True)
+                st.success("✅ Models successfully synchronized from cloud storage!")
+            except Exception as e:
+                st.error(f"⚠️ Automatic download failed. Error: {e}")
+                st.info("Please verify that your Google Drive folder access is set to 'Anyone with the link'.")
+
+# Execute the downloader before loading models
+download_models_from_drive_folder()
+
 # ==========================================
 # 1. PAGE SETUP
 # ==========================================
