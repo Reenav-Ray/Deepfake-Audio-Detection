@@ -6,36 +6,30 @@ import torchvision.models as models
 import joblib
 import librosa
 import numpy as np
-
 import os
 import gdown
-import streamlit as st
 
 # ==========================================
 # AUTOMATIC GOOGLE DRIVE FOLDER DOWNLOADER
 # ==========================================
 @st.cache_resource
 def download_models_from_drive_folder():
-    # Target path where models should live
     target_dir = "models"
     
-    # Define the expected paths for your 3 files
     required_files = [
         os.path.join(target_dir, "model_1_resnet18.pth"),
         os.path.join(target_dir, "model_2_lightgbm.pkl"),
         os.path.join(target_dir, "meta_learner.pkl")
     ]
     
-    # Check if any of the files are missing
     missing = [f for f in required_files if not os.path.exists(f)]
     
     if missing:
         with st.spinner("📥 Downloading models from Google Drive folder... (This takes 1-2 minutes on first boot)"):
             folder_id = '1f-_kq2aHau52gtolJWLaScXhBNXcZZ5a'
-            
             try:
-                # gdown will download the entire contents of the folder directly into the 'models' directory
-                gdown.download_folder(id=folder_id, output=target_dir, quiet=False, remaining_ok=True)
+                # FIX: Removed 'remaining_ok=True' to prevent Streamlit Cloud crashing
+                gdown.download_folder(id=folder_id, output=target_dir, quiet=False)
                 st.success("✅ Models successfully synchronized from cloud storage!")
             except Exception as e:
                 st.error(f"⚠️ Automatic download failed. Error: {e}")
@@ -65,10 +59,10 @@ class RobustAudioResNet(nn.Module):
         return self.resnet(x)
 
 # ==========================================
-# 3. LEGACY CACHING (The Fix)
+# 3. MODEL CACHING
 # ==========================================
-# Replaced @st.cache_resource with the legacy PyTorch model cache
-@st.cache(allow_output_mutation=True)
+# FIX: Upgraded to @st.cache_resource to prevent deprecation warnings in the cloud
+@st.cache_resource
 def load_models():
     device = torch.device('cpu')
     
@@ -83,7 +77,7 @@ def load_models():
 
 try:
     resnet_model, lgb_model, meta_model = load_models()
-    st.success("✅ Models loaded successfully from disk.")
+    st.success("✅ Models loaded successfully into memory.")
 except Exception as e:
     st.error(f"⚠️ Error loading models. Please check your 'models/' folder. Details: {e}")
 
@@ -129,37 +123,38 @@ uploaded_file = st.file_uploader("Upload an audio sample...", type=["wav", "mp3"
 if uploaded_file is not None:
     st.audio(uploaded_file, format='audio/wav')
     
-    # Removed modern button styling for legacy support
     if st.button("🔍 Analyze Audio"):
         with st.spinner("Extracting 48 acoustic features and running ensemble..."):
             try:
                 tensor_spec, tabular_features = process_audio(uploaded_file)
                 
+                # FIX: Explicitly mapping to Genuine Probability (Index 1) based on training data
                 with torch.no_grad():
                     resnet_out = resnet_model(tensor_spec)
-                    m1_prob = F.softmax(resnet_out, dim=1)[:, 1].item()
+                    p_genuine_resnet = F.softmax(resnet_out, dim=1)[:, 1].item()
                     
-                m2_prob = lgb_model.predict_proba(tabular_features)[:, 1][0]
+                p_genuine_lgb = lgb_model.predict_proba(tabular_features)[:, 1][0]
                 
-                meta_input = np.array([[m1_prob, m2_prob]])
-                final_prob = meta_model.predict_proba(meta_input)[:, 1][0]
+                meta_input = np.array([[p_genuine_resnet, p_genuine_lgb]])
+                p_genuine_final = meta_model.predict_proba(meta_input)[:, 1][0]
                 
                 THRESHOLD = 0.5000 
                 
-                # Replaced st.divider() with legacy markdown line
                 st.markdown("---")
                 st.subheader("Analysis Results")
                 
-                if final_prob >= THRESHOLD:
-                    st.error("🚨 **DEEPFAKE DETECTED**")
-                    st.write(f"**Confidence Score:** {final_prob:.2%}")
+                # Apply Corrected Decision Boundary
+                if p_genuine_final >= THRESHOLD:
+                    st.success("✅ **GENUINE HUMAN SPEECH**")
+                    st.write(f"**Confidence Score:** {p_genuine_final:.2%}")
                 else:
-                    st.success("✅ **GENUINE AUDIO**")
-                    st.write(f"**Deepfake Probability:** {final_prob:.2%}")
+                    st.error("🚨 **DEEPFAKE DETECTED**")
+                    st.write(f"**Confidence Score:** {(1.0 - p_genuine_final):.2%}")
                     
-                with st.expander("See individual model scores"):
-                    st.write(f"- **ResNet18 Score:** {m1_prob:.2%}")
-                    st.write(f"- **LightGBM Score:** {m2_prob:.2%}")
+                with st.expander("See individual model scores (Probability of Genuine)"):
+                    st.write(f"- **ResNet18 Score:** {p_genuine_resnet:.2%}")
+                    st.write(f"- **LightGBM Score:** {p_genuine_lgb:.2%}")
+                    st.write(f"- **Meta-Ensemble Score:** {p_genuine_final:.2%}")
                     
             except Exception as e:
                 st.error(f"An error occurred during processing: {e}")
