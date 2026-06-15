@@ -28,14 +28,12 @@ def download_models_from_drive_folder():
         with st.spinner("📥 Downloading models from Google Drive folder... (This takes 1-2 minutes on first boot)"):
             folder_id = '1f-_kq2aHau52gtolJWLaScXhBNXcZZ5a'
             try:
-                # FIX: Removed 'remaining_ok=True' to prevent Streamlit Cloud crashing
                 gdown.download_folder(id=folder_id, output=target_dir, quiet=False)
                 st.success("✅ Models successfully synchronized from cloud storage!")
             except Exception as e:
                 st.error(f"⚠️ Automatic download failed. Error: {e}")
                 st.info("Please verify that your Google Drive folder access is set to 'Anyone with the link'.")
 
-# Execute the downloader before loading models
 download_models_from_drive_folder()
 
 # ==========================================
@@ -61,7 +59,6 @@ class RobustAudioResNet(nn.Module):
 # ==========================================
 # 3. MODEL CACHING
 # ==========================================
-# FIX: Upgraded to @st.cache_resource to prevent deprecation warnings in the cloud
 @st.cache_resource
 def load_models():
     device = torch.device('cpu')
@@ -128,33 +125,33 @@ if uploaded_file is not None:
             try:
                 tensor_spec, tabular_features = process_audio(uploaded_file)
                 
-                # FIX: Explicitly mapping to Genuine Probability (Index 1) based on training data
+                # REVERTED: Index 1 officially maps to Deepfake
                 with torch.no_grad():
                     resnet_out = resnet_model(tensor_spec)
-                    p_genuine_resnet = F.softmax(resnet_out, dim=1)[:, 1].item()
+                    p_deepfake_resnet = F.softmax(resnet_out, dim=1)[:, 1].item()
                     
-                p_genuine_lgb = lgb_model.predict_proba(tabular_features)[:, 1][0]
+                p_deepfake_lgb = lgb_model.predict_proba(tabular_features)[:, 1][0]
                 
-                meta_input = np.array([[p_genuine_resnet, p_genuine_lgb]])
-                p_genuine_final = meta_model.predict_proba(meta_input)[:, 1][0]
+                meta_input = np.array([[p_deepfake_resnet, p_deepfake_lgb]])
+                p_deepfake_final = meta_model.predict_proba(meta_input)[:, 1][0]
                 
                 THRESHOLD = 0.5000 
                 
                 st.markdown("---")
                 st.subheader("Analysis Results")
                 
-                # Apply Corrected Decision Boundary
-                if p_genuine_final >= THRESHOLD:
-                    st.success("✅ **GENUINE HUMAN SPEECH**")
-                    st.write(f"**Confidence Score:** {p_genuine_final:.2%}")
-                else:
+                # REVERTED: Correct logic restored. High probability = Deepfake.
+                if p_deepfake_final >= THRESHOLD:
                     st.error("🚨 **DEEPFAKE DETECTED**")
-                    st.write(f"**Confidence Score:** {(1.0 - p_genuine_final):.2%}")
+                    st.write(f"**Confidence Score:** {p_deepfake_final:.2%}")
+                else:
+                    st.success("✅ **GENUINE HUMAN SPEECH**")
+                    st.write(f"**Confidence Score:** {(1.0 - p_deepfake_final):.2%}")
                     
-                with st.expander("See individual model scores (Probability of Genuine)"):
-                    st.write(f"- **ResNet18 Score:** {p_genuine_resnet:.2%}")
-                    st.write(f"- **LightGBM Score:** {p_genuine_lgb:.2%}")
-                    st.write(f"- **Meta-Ensemble Score:** {p_genuine_final:.2%}")
+                with st.expander("See individual model scores (Probability of Deepfake)"):
+                    st.write(f"- **ResNet18 Score:** {p_deepfake_resnet:.2%}")
+                    st.write(f"- **LightGBM Score:** {p_deepfake_lgb:.2%}")
+                    st.write(f"- **Meta-Ensemble Score:** {p_deepfake_final:.2%}")
                     
             except Exception as e:
                 st.error(f"An error occurred during processing: {e}")
