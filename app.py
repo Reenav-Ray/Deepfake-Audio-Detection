@@ -135,7 +135,7 @@ if uploaded_file is not None:
                 meta_input = np.array([[p_deepfake_resnet, p_deepfake_lgb]])
                 p_deepfake_final = meta_model.predict_proba(meta_input)[:, 1][0]
                 
-                THRESHOLD = 0.5000 
+                THRESHOLD = 0.81
                 
                 st.markdown("---")
                 st.subheader("Analysis Results")
