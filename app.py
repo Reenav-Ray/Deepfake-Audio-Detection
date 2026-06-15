@@ -81,11 +81,21 @@ except Exception as e:
 # ==========================================
 # 4. AUDIO FEATURE EXTRACTION
 # ==========================================
+# ==========================================
+# 4. AUDIO FEATURE EXTRACTION (UPDATED)
+# ==========================================
 def process_audio(file_buffer):
-    y, sr = librosa.load(file_buffer, sr=16000, duration=5.0)
+    # Load the audio at native length
+    y, sr = librosa.load(file_buffer, sr=16000)
+    target_length = sr * 5  # 80,000 samples for 5 seconds
     
-    if len(y) < sr * 5:
-        y = np.pad(y, (0, sr * 5 - len(y)))
+    # THE FIX: Loop the audio instead of padding with zeros
+    if len(y) < target_length:
+        # Repeat the audio array enough times to exceed 5 seconds
+        y = np.tile(y, int(np.ceil(target_length / len(y))))
+        
+    # Enforce exact 5-second truncation
+    y = y[:target_length]
         
     mel_spec = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=128, fmax=8000)
     mel_spec_db = librosa.power_to_db(mel_spec, ref=np.max)
@@ -135,7 +145,7 @@ if uploaded_file is not None:
                 meta_input = np.array([[p_deepfake_resnet, p_deepfake_lgb]])
                 p_deepfake_final = meta_model.predict_proba(meta_input)[:, 1][0]
                 
-                THRESHOLD = 0.81
+                THRESHOLD = 0.5000
                 
                 st.markdown("---")
                 st.subheader("Analysis Results")
