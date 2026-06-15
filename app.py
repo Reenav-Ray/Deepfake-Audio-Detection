@@ -73,29 +73,25 @@ except Exception as e:
     st.error(f"⚠️ Error loading models. Details: {e}")
 
 # ==========================================
-# 4. AUDIO FEATURE EXTRACTION (RESTORED TO TEST SCRIPT LOGIC)
+# 4. AUDIO FEATURE EXTRACTION 
 # ==========================================
 def process_audio(file_buffer):
     TARGET_SR = 16000
     DURATION = 5.0
     TOTAL_SAMPLES = int(TARGET_SR * DURATION)
     
-    # Load audio
     audio, sr = librosa.load(file_buffer, sr=TARGET_SR, mono=True)
     
-    # Exact padding logic from test_inference.py
     if len(audio) < TOTAL_SAMPLES:
         audio = np.pad(audio, (0, TOTAL_SAMPLES - len(audio)), mode='constant')
     else:
         audio = audio[:TOTAL_SAMPLES]
         
-    # Spatial Branch
     mel_spec = librosa.feature.melspectrogram(y=audio, sr=TARGET_SR, n_mels=128)
     mel_db = librosa.power_to_db(mel_spec, ref=np.max)
     spatial_tensor = torch.tensor(mel_db, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
     spatial_tensor = F.interpolate(spatial_tensor, size=(128, 157), mode='bilinear', align_corners=False)
     
-    # Tabular Branch (Exact features from test_inference.py)
     mfccs = np.mean(librosa.feature.mfcc(y=audio, sr=TARGET_SR, n_mfcc=20), axis=1)
     chroma = np.mean(librosa.feature.chroma_stft(y=audio, sr=TARGET_SR, n_chroma=12), axis=1)
     mel_12 = np.mean(librosa.feature.melspectrogram(y=audio, sr=TARGET_SR, n_mels=12), axis=1)
@@ -123,30 +119,31 @@ if uploaded_file is not None:
                 
                 with torch.no_grad():
                     resnet_out = resnet_model(tensor_spec)
-                    p_deepfake_resnet = F.softmax(resnet_out, dim=1)[:, 1].item()
+                    # Index 1 tracks GENUINE probability
+                    p_genuine_resnet = F.softmax(resnet_out, dim=1)[:, 1].item()
                     
-                p_deepfake_lgb = lgb_model.predict_proba(tabular_features)[:, 1][0]
+                p_genuine_lgb = lgb_model.predict_proba(tabular_features)[:, 1][0]
                 
-                meta_input = np.array([[p_deepfake_resnet, p_deepfake_lgb]])
-                p_deepfake_final = meta_model.predict_proba(meta_input)[:, 1][0]
+                meta_input = np.array([[p_genuine_resnet, p_genuine_lgb]])
+                p_genuine_final = meta_model.predict_proba(meta_input)[:, 1][0]
                 
-                # Default optimal boundary
                 THRESHOLD = 0.5000 
                 
                 st.markdown("---")
                 st.subheader("Analysis Results")
                 
-                if p_deepfake_final >= THRESHOLD:
-                    st.error("🚨 **DEEPFAKE DETECTED**")
-                    st.write(f"**Confidence Score:** {p_deepfake_final:.2%}")
-                else:
+                # CORRECTED LOGIC: High probability = Genuine
+                if p_genuine_final >= THRESHOLD:
                     st.success("✅ **GENUINE HUMAN SPEECH**")
-                    st.write(f"**Confidence Score:** {(1.0 - p_deepfake_final):.2%}")
+                    st.write(f"**Confidence Score:** {p_genuine_final:.2%}")
+                else:
+                    st.error("🚨 **DEEPFAKE DETECTED**")
+                    st.write(f"**Confidence Score:** {(1.0 - p_genuine_final):.2%}")
                     
-                with st.expander("See individual model scores (Probability of Deepfake)"):
-                    st.write(f"- **ResNet18 Score:** {p_deepfake_resnet:.2%}")
-                    st.write(f"- **LightGBM Score:** {p_deepfake_lgb:.2%}")
-                    st.write(f"- **Meta-Ensemble Score:** {p_deepfake_final:.2%}")
+                with st.expander("See individual model scores (Probability of being Genuine)"):
+                    st.write(f"- **ResNet18 Score:** {p_genuine_resnet:.2%}")
+                    st.write(f"- **LightGBM Score:** {p_genuine_lgb:.2%}")
+                    st.write(f"- **Meta-Ensemble Score:** {p_genuine_final:.2%}")
                     
             except Exception as e:
                 st.error(f"An error occurred during processing: {e}")
